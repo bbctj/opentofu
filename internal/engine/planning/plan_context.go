@@ -13,6 +13,7 @@ import (
 	"github.com/opentofu/opentofu/internal/lang/eval"
 	"github.com/opentofu/opentofu/internal/states"
 	"github.com/opentofu/opentofu/internal/tfdiags"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // planContext is our shared state for the various parts of a single call
@@ -47,6 +48,9 @@ type planContext struct {
 	// Each resource instance should modify it once.
 	upgradedState *states.SyncState
 
+	// rootOutput is the values and dependencies of the root module outputs
+	rootOutput rootOutput
+
 	providers plugins.Providers
 }
 
@@ -80,7 +84,14 @@ func (p *planContext) Close(ctx context.Context) (*planContextResult, tfdiags.Di
 		ResourceInstanceObjects: p.resourceInstObjs.Close(),
 		PrevRoundState:          p.upgradedState.Close(),
 		RefreshedState:          p.refreshedState.Close(),
+		RootOutput:              p.rootOutput,
 	}, diags
+}
+
+type rootOutput struct {
+	PrevValues           map[string]*states.OutputValue
+	Values               cty.Value
+	ResourceDependencies addrs.Set[addrs.AbsResourceInstance]
 }
 
 // planContextResult collects together the intermediate results produced by
@@ -90,4 +101,9 @@ type planContextResult struct {
 	ResourceInstanceObjects *resourceInstanceObjects
 	PrevRoundState          *states.State
 	RefreshedState          *states.State
+	RootOutput              rootOutput
+
+	// Unfortunately, we need to signal to the apply engine that some things
+	// like output values need to be handled a bit differently.
+	Destroying bool
 }

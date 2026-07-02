@@ -9,13 +9,18 @@ import (
 	"context"
 
 	"github.com/opentofu/opentofu/internal/addrs"
+	"github.com/opentofu/opentofu/internal/lang/eval/internal/configgraph"
+	"github.com/opentofu/opentofu/internal/lang/eval/internal/evalglue"
+	"github.com/opentofu/opentofu/internal/lang/grapheval"
 	"github.com/opentofu/opentofu/internal/providers"
 	"github.com/opentofu/opentofu/internal/tfdiags"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // A PlanningOracle provides information from the configuration that is needed
 // by the planning engine to help orchestrate the planning process.
 type PlanningOracle struct {
+	root      evalglue.CompiledModuleInstance
 	providers *managedProviders
 }
 
@@ -39,6 +44,22 @@ type PlanningOracle struct {
 // unless its provider instance is re-added to the configuration.
 func (o *PlanningOracle) ProviderInstance(ctx context.Context, addr addrs.AbsProviderInstanceCorrect) (providers.Interface, tfdiags.Diagnostics) {
 	return o.providers.ProviderInstance(ctx, addr)
+}
+
+// RootOutputs produces the root output values and set resource dependencies
+func (o *PlanningOracle) RootOutputs(ctx context.Context) (cty.Value, addrs.Set[addrs.AbsResourceInstance]) {
+	ctx = grapheval.ContextWithNewWorker(ctx)
+
+	// Ignore diags, these will be handled by checkAll
+	val, _ := o.root.ResultValuer(ctx).Value(ctx)
+
+	contributing := configgraph.ContributingResourceInstances(val)
+	deps := addrs.MakeSet[addrs.AbsResourceInstance]()
+	for dep := range contributing {
+		deps.Add(dep.Addr)
+	}
+
+	return configgraph.PrepareOutgoingValue(val), deps
 }
 
 func (o *PlanningOracle) Close(ctx context.Context) tfdiags.Diagnostics {

@@ -172,6 +172,7 @@ func (c *ConfigInstance) DrivePlanning(ctx context.Context, buildGlue func(*Plan
 
 	// We can now initialize the planning oracle, before we start evaluating
 	// anything that might cause calls to the evalGlue object.
+	oracle.root = rootModuleInstance
 	oracle.providers = managedProviders
 	// Inject configured providers
 	evalGlue.providers = managedProviders
